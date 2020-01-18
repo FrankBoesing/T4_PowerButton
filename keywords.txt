@@ -1,0 +1,2 @@
+set_arm_power_button_callback	KEYWORD1
+arm_power_button_pressed	KEYWORD1
