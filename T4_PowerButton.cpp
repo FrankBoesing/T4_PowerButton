@@ -56,7 +56,7 @@ void __int_power_button(void) {
 
 FLASHMEM
 void set_arm_power_button_callback(void (*fun_ptr)(void)) {
-  SNVS_HPCOMR |= (1 << 31) | (1 << 4);
+ // SNVS_HPCOMR |= (1 << 31) | (1 << 4);
   SNVS_LPSR |= (1 << 18);
   __user_power_button_callback = fun_ptr;
   if (fun_ptr != nullptr) {
@@ -69,6 +69,37 @@ void set_arm_power_button_callback(void (*fun_ptr)(void)) {
     NVIC_DISABLE_IRQ(IRQ_SNVS_ONOFF);
   }
   asm volatile ("dsb");
+}
+
+FLASHMEM
+void arm_reset(void) {
+  uint32_t tmp = SNVS_LPCR; // save control register
+
+  SNVS_LPSR |= 1;
+
+  // disable alarm
+  SNVS_LPCR &= ~0x02;
+  while (SNVS_LPCR & 0x02);
+
+  __disable_irq();
+  //get Time:
+  uint32_t lsb, msb;
+  do {
+    msb = SNVS_LPSRTCMR;
+    lsb = SNVS_LPSRTCLR;
+  } while ( (SNVS_LPSRTCLR != lsb) | (SNVS_LPSRTCMR != msb) );
+  uint32_t secs = (msb << 17) | (lsb >> 15);
+
+  //set alarm
+  secs += 2;
+  SNVS_LPTAR = secs;
+  while (SNVS_LPTAR != secs);
+
+  SNVS_LPCR = tmp | 0x02; // restore control register and set alarm
+  while (!(SNVS_LPCR & 0x02));
+
+  SNVS_LPCR |= (1 << 6); // turn off power
+  while (1) asm("wfi");  
 }
 
 #endif
