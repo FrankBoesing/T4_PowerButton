@@ -21,14 +21,15 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
- 
+
 #if !defined(T4PowerButton)
 #define T4PowerButton
 
+#include "Arduino.h"
+
+void arm_power_down(void); //switch off
 void set_arm_power_button_callback(void (*fun_ptr)(void));
 
-boolean arm_power_button_pressed(void) {
-  return (SNVS_LPSR >> 17) & 0x01;
-}
+bool arm_power_button_pressed(void);
 
 #endif

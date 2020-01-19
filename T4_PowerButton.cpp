@@ -25,38 +25,50 @@
 #if !defined(T4PowerButton)
 #define T4PowerButton
 
-#include "IMXRT.h" 
+#include "T4_PowerButton.h"
+#include "imxrt.h"
+#include "avr/pgmspace.h"
 
 static void (*__user_power_button_callback)(void);
 
-void __int_power_button(void)  {
+FLASHMEM __attribute__((noreturn))
+void arm_power_down() {
+    SNVS_LPCR |= SNVS_LPCR_TOP; //Switch off now
+    asm volatile ("dsb");
+    while (1) asm ("wfi");
+}
+
+bool arm_power_button_pressed(void) {
+  return (SNVS_LPSR >> 17) & 0x01;
+}
+
+FLASHMEM
+void __int_power_button(void) {
   if (SNVS_HPSR & 0x40) {
     SNVS_HPCOMR |= (1 << 31) | (1 << 4);
     SNVS_LPSR |= (1 << 18);
     if (__user_power_button_callback != nullptr) __user_power_button_callback();
     __disable_irq();
     NVIC_CLEAR_PENDING(IRQ_SNVS_ONOFF);
-    SNVS_LPCR |= SNVS_LPCR_TOP; //Switch off now
-    asm volatile ("dsb");
-    while (1) asm ("wfi");
+    arm_power_down();
   }
 }
 
+FLASHMEM
 void set_arm_power_button_callback(void (*fun_ptr)(void)) {
   SNVS_HPCOMR |= (1 << 31) | (1 << 4);
   SNVS_LPSR |= (1 << 18);
   __user_power_button_callback = fun_ptr;
   if (fun_ptr != nullptr) {
-    NVIC_CLEAR_PENDING(IRQ_SNVS_ONOFF) ;
-    _VectorsRam[IRQ_SNVS_ONOFF + 16] = &__int_power_button; //set interrupt vector
-    asm volatile ("dsb"); //make sure to write before interrupt-enable
+    NVIC_CLEAR_PENDING(IRQ_SNVS_ONOFF);
+    attachInterruptVector(IRQ_SNVS_ONOFF, &__int_power_button);
     NVIC_SET_PRIORITY(IRQ_SNVS_ONOFF, 255); //lowest priority
-    NVIC_ENABLE_IRQ(IRQ_SNVS_ONOFF); //enable interrupt
+    asm volatile ("dsb"); //make sure to write before interrupt-enable
+    NVIC_ENABLE_IRQ(IRQ_SNVS_ONOFF);
   } else {
     NVIC_DISABLE_IRQ(IRQ_SNVS_ONOFF);
   }
   asm volatile ("dsb");
-
 }
 
 #endif
