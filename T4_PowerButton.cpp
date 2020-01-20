@@ -45,7 +45,7 @@ bool arm_power_button_pressed(void) {
 FLASHMEM
 void __int_power_button(void) {
   if (SNVS_HPSR & 0x40) {
-    //SNVS_HPCOMR |= (1 << 31) | (1 << 4);
+    SNVS_HPCOMR |= (1 << 31) | (1 << 4);
     SNVS_LPSR |= (1 << 18);
     if (__user_power_button_callback != nullptr) __user_power_button_callback();
     __disable_irq();
@@ -56,7 +56,7 @@ void __int_power_button(void) {
 
 FLASHMEM
 void set_arm_power_button_callback(void (*fun_ptr)(void)) {
- // SNVS_HPCOMR |= (1 << 31) | (1 << 4);
+  SNVS_HPCOMR |= (1 << 31) | (1 << 4);
   SNVS_LPSR |= (1 << 18);
   __user_power_button_callback = fun_ptr;
   if (fun_ptr != nullptr) {
@@ -98,8 +98,9 @@ void arm_reset(void) {
   SNVS_LPCR = tmp | 0x02; // restore control register and set alarm
   while (!(SNVS_LPCR & 0x02));
 
-  SNVS_LPCR |= (1 << 6); // turn off power
-  while (1) asm("wfi");  
+  arm_power_down();
+  /*SNVS_LPCR |= (1 << 6); // turn off power
+  while (1) asm("wfi");  */
 }
 
 #endif
