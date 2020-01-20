@@ -45,22 +45,31 @@ bool arm_power_button_pressed(void) {
 FLASHMEM
 void __int_power_button(void) {
   if (SNVS_HPSR & 0x40) {
+    int NV0 = IMXRT_SNVS.offset100;
+    int NV1 = IMXRT_SNVS.offset104;
+    int NV2 = IMXRT_SNVS.offset108;
+    int NV3 = IMXRT_SNVS.offset10C;  
     SNVS_HPCOMR |= (1 << 31) | (1 << 4);
     SNVS_LPSR |= (1 << 18);
+    SNVS_LPCR |= (1 << 24);
+    IMXRT_SNVS.offset100 = NV0;
+    IMXRT_SNVS.offset104 = NV1;
+    IMXRT_SNVS.offset108 = NV2;
+    IMXRT_SNVS.offset10C = NV3;
     if (__user_power_button_callback != nullptr) __user_power_button_callback();
-    __disable_irq();
+    __disable_irq(); 
     NVIC_CLEAR_PENDING(IRQ_SNVS_ONOFF);
     arm_power_down();
   }
 }
 
 FLASHMEM
-void set_arm_power_button_callback(void (*fun_ptr)(void)) {
-  SNVS_HPCOMR |= (1 << 31) | (1 << 4);
-  SNVS_LPSR |= (1 << 18);
+void set_arm_power_button_callback(void (*fun_ptr)(void)) {	
+    SNVS_LPSR |= (1 << 18);
+    SNVS_LPCR |= (1 << 24);
   __user_power_button_callback = fun_ptr;
-  if (fun_ptr != nullptr) {
-    NVIC_CLEAR_PENDING(IRQ_SNVS_ONOFF);
+  if (fun_ptr != nullptr) { 
+    NVIC_CLEAR_PENDING(IRQ_SNVS_ONOFF);   
     attachInterruptVector(IRQ_SNVS_ONOFF, &__int_power_button);
     NVIC_SET_PRIORITY(IRQ_SNVS_ONOFF, 255); //lowest priority
     asm volatile ("dsb"); //make sure to write before interrupt-enable
@@ -99,8 +108,6 @@ void arm_reset(void) {
   while (!(SNVS_LPCR & 0x02));
 
   arm_power_down();
-  /*SNVS_LPCR |= (1 << 6); // turn off power
-  while (1) asm("wfi");  */
 }
 
 #endif
