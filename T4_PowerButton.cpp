@@ -62,6 +62,8 @@ void set_arm_power_button_callback(void (*fun_ptr)(void)) {
     SNVS_LPSR |= (1 << 18) | (1 << 17);
     SNVS_LPCR |= (1 << 24);
   __user_power_button_callback = fun_ptr;
+  if (fun_ptr != nullptr) {
+    NVIC_CLEAR_PENDING(IRQ_SNVS_ONOFF);
     attachInterruptVector(IRQ_SNVS_ONOFF, &__int_power_button);
     NVIC_SET_PRIORITY(IRQ_SNVS_ONOFF, 255); //lowest priority
     asm volatile ("dsb"); //make sure to write before interrupt-enable
@@ -71,6 +73,12 @@ void set_arm_power_button_callback(void (*fun_ptr)(void)) {
   }
   asm volatile ("dsb");
 }
+
+//Constructors are called before setup. Use this feature to save and reset SNVS_LPSR - need for correct work of arm_reset()
+class __class_reset_snvs_psr {
+ public: __class_reset_snvs_psr() { snvs_lpsr_save = SNVS_LPSR; SNVS_LPSR = snvs_lpsr_save | (1 << 17); }
+};
+__class_reset_snvs_psr _class_reset_snvs_psr;
 
 FLASHMEM
 void arm_reset(void) {
