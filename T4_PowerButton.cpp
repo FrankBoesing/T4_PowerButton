@@ -38,8 +38,11 @@ void arm_power_down() {
     while (1) asm ("wfi");
 }
 
+static uint32_t snvs_lpsr_save;
+
 bool arm_power_button_pressed(void) {
-  return (SNVS_LPSR >> 17) & 0x01;
+  //return (SNVS_LPSR >> 17) & 0x01;
+  return (snvs_lpsr_save >> 17) & 0x01;
 }
 
 FLASHMEM
@@ -47,21 +50,18 @@ void __int_power_button(void) {
   if (SNVS_HPSR & 0x40) {
     SNVS_HPCOMR |= (1 << 31)/* | (1 << 4)*/;
     SNVS_LPSR |= (1 << 18) | (1 << 17);
-    SNVS_LPCR |= (1 << 24);
     if (__user_power_button_callback != nullptr) __user_power_button_callback();
-    __disable_irq(); 
+    __disable_irq();
     NVIC_CLEAR_PENDING(IRQ_SNVS_ONOFF);
     arm_power_down();
   }
 }
 
 FLASHMEM
-void set_arm_power_button_callback(void (*fun_ptr)(void)) {	
+void set_arm_power_button_callback(void (*fun_ptr)(void)) {
     SNVS_LPSR |= (1 << 18) | (1 << 17);
     SNVS_LPCR |= (1 << 24);
   __user_power_button_callback = fun_ptr;
-  if (fun_ptr != nullptr) { 
-    NVIC_CLEAR_PENDING(IRQ_SNVS_ONOFF);   
     attachInterruptVector(IRQ_SNVS_ONOFF, &__int_power_button);
     NVIC_SET_PRIORITY(IRQ_SNVS_ONOFF, 255); //lowest priority
     asm volatile ("dsb"); //make sure to write before interrupt-enable

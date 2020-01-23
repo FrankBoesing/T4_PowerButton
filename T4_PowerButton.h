@@ -30,6 +30,7 @@
 void arm_reset(void); // reset
 void arm_power_down(void); //switch off
 void set_arm_power_button_callback(void (*fun_ptr)(void));
+void arm_enable_nvram(void) { SNVS_LPCR |= (1 << 24); }
 
 bool arm_power_button_pressed(void);
 
