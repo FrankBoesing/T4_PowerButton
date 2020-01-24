@@ -26,8 +26,10 @@
 #define T4PowerButton
 
 #include "T4_PowerButton.h"
-#include "imxrt.h"
-#include "avr/pgmspace.h"
+#include "Arduino.h"
+//#include "imxrt.h"
+//#include "avr/pgmspace.h"
+
 
 static void (*__user_power_button_callback)(void);
 
@@ -74,6 +76,111 @@ FLASHMEM
 void arm_reset(void) {
 	SCB_AIRCR = 0x05FA0004;
 	while (1) asm ("wfi");
+}
+
+unsigned memfree(void) {
+  extern unsigned long _ebss;
+  extern unsigned long _sdata;
+  extern unsigned long _estack;
+  const unsigned DTCM_START = 0x20000000UL;
+  unsigned dtcm = (unsigned)&_estack - DTCM_START;
+  unsigned stackinuse = (unsigned) &_estack -  (unsigned) __builtin_frame_address(0);
+  unsigned varsinuse = (unsigned)&_ebss - (unsigned)&_sdata;
+  unsigned freemem = dtcm - (stackinuse + varsinuse);
+  return freemem;
+}
+
+extern "C" {
+void startup_late_hook(void) {
+  extern unsigned long _ebss;
+  unsigned long * p =  &_ebss;
+  size_t size = (size_t)(uint8_t*)__builtin_frame_address(0) - 16 - (uintptr_t) &_ebss;
+  memset((void*)p, 0, size);
+}
+}
+
+unsigned long maxstack(void) {
+  extern unsigned long _ebss;
+  extern unsigned long _estack;
+  unsigned long * p =  &_ebss;
+  while (*p == 0) p++;
+  return (unsigned) &_estack - (unsigned) p;
+}
+
+FLASHMEM
+void flexRamInfo(void) {
+
+#if defined(__IMXRT1062__)
+  const unsigned DTCM_START = 0x20000000UL;
+  const unsigned OCRAM_START = 0x20200000UL;
+  const unsigned OCRAM_SIZE = 512;
+  const unsigned FLASH_SIZE = 2048;
+#endif
+
+  Serial.println(__FILE__ " " __DATE__ " " __TIME__ );
+  Serial.print("Teensyduino version ");
+  Serial.println(TEENSYDUINO / 100.0f);
+  Serial.println();
+
+  int itcm = 0;
+  int dtcm = 0;
+  int ocram = 0;
+  uint32_t gpr17 = IOMUXC_GPR_GPR17;
+
+  char __attribute__((unused)) dispstr[17] = {0};
+  dispstr[16] = 0;
+
+  for (int i = 15; i >= 0; i--) {
+    switch ((gpr17 >> (i * 2)) & 0b11) {
+      default: dispstr[15 - i] = '.'; break;
+      case 0b01: dispstr[15 - i] = 'O'; ocram++; break;
+      case 0b10: dispstr[15 - i] = 'D'; dtcm++; break;
+      case 0b11: dispstr[15 - i] = 'I'; itcm++; break;
+    }
+  }
+
+  Serial.printf("ITCM: %dkB, DTCM: %dkB, OCRAM: %d(+%d)kB [%s]\n", itcm * 32, dtcm * 32, ocram * 32, OCRAM_SIZE, dispstr);
+  const char* fmtstr = "%-6s%7d %5.02f%% of %4dkB (%7d Bytes free) %s\n";
+
+  extern unsigned long _stext;
+  extern unsigned long _etext;
+  extern unsigned long _sdata;
+  extern unsigned long _ebss;
+  extern unsigned long _flashimagelen;
+  extern unsigned long _heap_start;
+  extern unsigned long _estack;
+
+  Serial.printf(fmtstr, "ITCM:",
+                (unsigned)&_etext - (unsigned)&_stext,
+                (float)((unsigned)&_etext - (unsigned)&_stext) / ((float)itcm * 32768.0f) * 100.0f,
+                itcm * 32,
+                itcm * 32768 - ((unsigned)&_etext - (unsigned)&_stext), "(RAM1) FASTRUN");
+
+  Serial.printf(fmtstr, "OCRAM:",
+                (unsigned)&_heap_start - OCRAM_START,
+                (float)((unsigned)&_heap_start - OCRAM_START) / (OCRAM_SIZE * 1024.0f) * 100.0f,
+                OCRAM_SIZE,
+                OCRAM_SIZE * 1024 - ((unsigned)&_heap_start - OCRAM_START), "(RAM2) DMAMEM, Heap");
+
+  Serial.printf(fmtstr, "FLASH:",
+                (unsigned)&_flashimagelen,
+                ((unsigned)&_flashimagelen) / (FLASH_SIZE * 1024.0f) * 100.0f,
+                FLASH_SIZE,
+                FLASH_SIZE * 1024 - ((unsigned)&_flashimagelen), "FLASHMEM, PROGMEM");
+
+  unsigned _dtcm = (unsigned)&_estack - DTCM_START; //or, one could use dtcm * 32768 here.
+  //unsigned stackinuse = (unsigned) &_estack -  (unsigned) __builtin_frame_address(0);
+  unsigned stackinuse = maxstack();
+  unsigned varsinuse = (unsigned)&_ebss - (unsigned)&_sdata;
+  //unsigned freemem = _dtcm - stackinuse - varsinuse;
+  Serial.printf("DTCM:\n  %7d Bytes (%d kB)\n", _dtcm, _dtcm / 1024);
+  Serial.printf("- %7d Bytes (%d kB) global variables\n", varsinuse, varsinuse / 1024);
+  Serial.printf("- %7d Bytes (%d kB) max. stack so far\n", stackinuse, stackinuse / 1024);
+  Serial.println("=========");
+  Serial.printf("  %7d Bytes free (%d kB), %d Bytes in use (%d kB).\n",
+                _dtcm - (varsinuse + stackinuse), (_dtcm - (varsinuse + stackinuse)) / 1024,
+                varsinuse + stackinuse, (varsinuse + stackinuse) / 1024
+               );
 }
 
 #endif

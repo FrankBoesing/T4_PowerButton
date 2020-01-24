@@ -33,5 +33,8 @@ void set_arm_power_button_callback(void (*fun_ptr)(void));
 void arm_enable_nvram(void) { SNVS_LPCR |= (1 << 24); }
 
 bool arm_power_button_pressed(void);
+unsigned memfree(void);
+void flexRamInfo(void);
+unsigned long maxstack(void);
 
 #endif
