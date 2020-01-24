@@ -38,11 +38,8 @@ void arm_power_down() {
     while (1) asm ("wfi");
 }
 
-static uint32_t snvs_lpsr_save;
-
 bool arm_power_button_pressed(void) {
-  //return (SNVS_LPSR >> 17) & 0x01;
-  return (snvs_lpsr_save >> 17) & 0x01;
+  return (SNVS_LPSR >> 17) & 0x01;
 }
 
 FLASHMEM
@@ -59,7 +56,7 @@ void __int_power_button(void) {
 
 FLASHMEM
 void set_arm_power_button_callback(void (*fun_ptr)(void)) {
-    SNVS_LPSR |= (1 << 18) | (1 << 17);
+  SNVS_LPSR |= (1 << 18) | (1 << 17);
   __user_power_button_callback = fun_ptr;
   if (fun_ptr != nullptr) {
     NVIC_CLEAR_PENDING(IRQ_SNVS_ONOFF);
