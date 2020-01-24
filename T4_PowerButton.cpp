@@ -60,7 +60,6 @@ void __int_power_button(void) {
 FLASHMEM
 void set_arm_power_button_callback(void (*fun_ptr)(void)) {
     SNVS_LPSR |= (1 << 18) | (1 << 17);
-    SNVS_LPCR |= (1 << 24);
   __user_power_button_callback = fun_ptr;
   if (fun_ptr != nullptr) {
     NVIC_CLEAR_PENDING(IRQ_SNVS_ONOFF);
@@ -74,40 +73,10 @@ void set_arm_power_button_callback(void (*fun_ptr)(void)) {
   asm volatile ("dsb");
 }
 
-//Constructors are called before setup. Use this feature to save and reset SNVS_LPSR - need for correct work of arm_reset()
-class __class_reset_snvs_psr {
- public: __class_reset_snvs_psr() { snvs_lpsr_save = SNVS_LPSR; SNVS_LPSR = snvs_lpsr_save | (1 << 17); }
-};
-__class_reset_snvs_psr _class_reset_snvs_psr;
-
 FLASHMEM
 void arm_reset(void) {
-  uint32_t tmp = SNVS_LPCR; // save control register
-
-  SNVS_LPSR |= 1;
-
-  // disable alarm
-  SNVS_LPCR &= ~0x02;
-  while (SNVS_LPCR & 0x02);
-
-  __disable_irq();
-  //get Time:
-  uint32_t lsb, msb;
-  do {
-    msb = SNVS_LPSRTCMR;
-    lsb = SNVS_LPSRTCLR;
-  } while ( (SNVS_LPSRTCLR != lsb) | (SNVS_LPSRTCMR != msb) );
-  uint32_t secs = (msb << 17) | (lsb >> 15);
-
-  //set alarm
-  secs += 2;
-  SNVS_LPTAR = secs;
-  while (SNVS_LPTAR != secs);
-
-  SNVS_LPCR = tmp | 0x02; // restore control register and set alarm
-  while (!(SNVS_LPCR & 0x02));
-
-  arm_power_down();
+	SCB_AIRCR = 0x05FA0004;
+	while (1) asm ("wfi");
 }
 
 #endif
