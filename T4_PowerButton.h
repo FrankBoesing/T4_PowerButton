@@ -33,8 +33,11 @@ void set_arm_power_button_callback(void (*fun_ptr)(void));
 void arm_enable_nvram(void) { SNVS_LPCR |= (1 << 24); }
 
 bool arm_power_button_pressed(void);
-unsigned memfree(void);
+
+unsigned memfree(void); //free stack / global variable space
+unsigned heapfree(void); //heap heap space
+void progInfo(); //display file + vesion info
 void flexRamInfo(void);
-unsigned long maxstack(void);
+unsigned long maxstack(void); //maximal stack usage
 
 #endif

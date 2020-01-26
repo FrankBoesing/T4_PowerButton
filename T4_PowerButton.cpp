@@ -30,6 +30,12 @@
 //#include "imxrt.h"
 //#include "avr/pgmspace.h"
 
+#if defined(__IMXRT1062__)
+  static const unsigned DTCM_START = 0x20000000UL;
+  static const unsigned OCRAM_START = 0x20200000UL;
+  static const unsigned OCRAM_SIZE = 512;
+  static const unsigned FLASH_SIZE = 2048;
+#endif
 
 static void (*__user_power_button_callback)(void);
 
@@ -74,6 +80,10 @@ void set_arm_power_button_callback(void (*fun_ptr)(void)) {
 
 FLASHMEM
 void arm_reset(void) {
+#if TEENSYDUINO < 150
+	IOMUXC_GPR_GPR16 = 0x00200007;
+	asm volatile ("dsb");
+#endif
 	SCB_AIRCR = 0x05FA0004;
 	while (1) asm ("wfi");
 }
@@ -88,6 +98,15 @@ unsigned memfree(void) {
   unsigned varsinuse = (unsigned)&_ebss - (unsigned)&_sdata;
   unsigned freemem = dtcm - (stackinuse + varsinuse);
   return freemem;
+}
+
+unsigned heapfree(void) {
+// https://forum.pjrc.com/threads/33443-How-to-display-free-ram?p=99128&viewfull=1#post99128
+  void* hTop = malloc(1);// current position of heap.
+  unsigned heapTop = (unsigned) hTop;
+  free(hTop);
+  unsigned freeheap = (OCRAM_START + (OCRAM_SIZE * 1024)) - heapTop;
+  return freeheap;
 }
 
 extern "C" {
@@ -108,19 +127,15 @@ unsigned long maxstack(void) {
 }
 
 FLASHMEM
-void flexRamInfo(void) {
-
-#if defined(__IMXRT1062__)
-  const unsigned DTCM_START = 0x20000000UL;
-  const unsigned OCRAM_START = 0x20200000UL;
-  const unsigned OCRAM_SIZE = 512;
-  const unsigned FLASH_SIZE = 2048;
-#endif
-
+void progInfo(void) {
   Serial.println(__FILE__ " " __DATE__ " " __TIME__ );
   Serial.print("Teensyduino version ");
   Serial.println(TEENSYDUINO / 100.0f);
   Serial.println();
+}
+
+FLASHMEM
+void flexRamInfo(void) {
 
   int itcm = 0;
   int dtcm = 0;
@@ -139,7 +154,7 @@ void flexRamInfo(void) {
     }
   }
 
-  Serial.printf("ITCM: %dkB, DTCM: %dkB, OCRAM: %d(+%d)kB [%s]\n", itcm * 32, dtcm * 32, ocram * 32, OCRAM_SIZE, dispstr);
+// Serial.printf("ITCM: %dkB, DTCM: %dkB, OCRAM: %d(+%d)kB [%s]\n", itcm * 32, dtcm * 32, ocram * 32, OCRAM_SIZE, dispstr);
   const char* fmtstr = "%-6s%7d %5.02f%% of %4dkB (%7d Bytes free) %s\n";
 
   extern unsigned long _stext;
@@ -150,23 +165,36 @@ void flexRamInfo(void) {
   extern unsigned long _heap_start;
   extern unsigned long _estack;
 
-  Serial.printf(fmtstr, "ITCM:",
-                (unsigned)&_etext - (unsigned)&_stext,
-                (float)((unsigned)&_etext - (unsigned)&_stext) / ((float)itcm * 32768.0f) * 100.0f,
-                itcm * 32,
-                itcm * 32768 - ((unsigned)&_etext - (unsigned)&_stext), "(RAM1) FASTRUN");
-
-  Serial.printf(fmtstr, "OCRAM:",
-                (unsigned)&_heap_start - OCRAM_START,
-                (float)((unsigned)&_heap_start - OCRAM_START) / (OCRAM_SIZE * 1024.0f) * 100.0f,
-                OCRAM_SIZE,
-                OCRAM_SIZE * 1024 - ((unsigned)&_heap_start - OCRAM_START), "(RAM2) DMAMEM, Heap");
-
   Serial.printf(fmtstr, "FLASH:",
                 (unsigned)&_flashimagelen,
                 ((unsigned)&_flashimagelen) / (FLASH_SIZE * 1024.0f) * 100.0f,
                 FLASH_SIZE,
                 FLASH_SIZE * 1024 - ((unsigned)&_flashimagelen), "FLASHMEM, PROGMEM");
+
+  Serial.printf(fmtstr, "ITCM:",
+                (unsigned)&_etext - (unsigned)&_stext,
+                (float)((unsigned)&_etext - (unsigned)&_stext) / ((float)itcm * 32768.0f) * 100.0f,
+                itcm * 32,
+                itcm * 32768 - ((unsigned)&_etext - (unsigned)&_stext), "(RAM1) FASTRUN");
+/*
+  Serial.printf(fmtstr, "OCRAM:",
+                (unsigned)&_heap_start - OCRAM_START,
+                (float)((unsigned)&_heap_start - OCRAM_START) / (OCRAM_SIZE * 1024.0f) * 100.0f,
+                OCRAM_SIZE,
+                OCRAM_SIZE * 1024 - ((unsigned)&_heap_start - OCRAM_START), "(RAM2) DMAMEM, Heap");
+*/
+
+  void* hTop = malloc(1);// current position of heap.
+  unsigned heapTop = (unsigned) hTop;
+  free(hTop);
+  unsigned freeheap = (OCRAM_START + (OCRAM_SIZE * 1024)) - heapTop;
+
+  Serial.printf("OCRAM:\n  %7d Bytes (%d kB)\n", OCRAM_SIZE * 1024, OCRAM_SIZE);
+  Serial.printf("- %7d Bytes (%d kB) DMAMEM\n", ((unsigned)&_heap_start - OCRAM_START), ((unsigned)&_heap_start - OCRAM_START) / 1024);
+  Serial.printf("- %7d Bytes (%d kB) Heap\n", (heapTop - (unsigned)&_heap_start ), (heapTop - (unsigned)&_heap_start ) / 1024);
+  Serial.printf("  %7d Bytes heap free (%d kB), %d Bytes OCRAM in use (%d kB).\n",
+                freeheap, freeheap / 1024,
+                heapTop - OCRAM_START, (heapTop - OCRAM_START) / 1024);
 
   unsigned _dtcm = (unsigned)&_estack - DTCM_START; //or, one could use dtcm * 32768 here.
   //unsigned stackinuse = (unsigned) &_estack -  (unsigned) __builtin_frame_address(0);
