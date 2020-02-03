@@ -75,14 +75,14 @@ void set_arm_power_button_callback(void (*fun_ptr)(void)) {
   } else {
     NVIC_DISABLE_IRQ(IRQ_SNVS_ONOFF);
   }
-  asm volatile ("dsb");
+  asm volatile ("dsb":::"memory");
 }
 
 FLASHMEM
 void arm_reset(void) {
 #if TEENSYDUINO < 150
 	IOMUXC_GPR_GPR16 = 0x00200007;
-	asm volatile ("dsb");
+	asm volatile ("dsb":::"memory");
 #endif
 	SCB_AIRCR = 0x05FA0004;
 	while (1) asm ("wfi");
