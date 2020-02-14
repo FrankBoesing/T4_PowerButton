@@ -27,14 +27,18 @@
 
 #include "T4_PowerButton.h"
 #include "Arduino.h"
-//#include "imxrt.h"
-//#include "avr/pgmspace.h"
 
-#if defined(__IMXRT1062__)
+
+#if defined(ARDUINO_TEENSY40)
   static const unsigned DTCM_START = 0x20000000UL;
   static const unsigned OCRAM_START = 0x20200000UL;
   static const unsigned OCRAM_SIZE = 512;
-  static const unsigned FLASH_SIZE = 2048;
+  static const unsigned FLASH_SIZE = 1984;
+#elif defined(ARDUINO_TEENSY41)
+  static const unsigned DTCM_START = 0x20000000UL;
+  static const unsigned OCRAM_START = 0x20200000UL;
+  static const unsigned OCRAM_SIZE = 512;
+  static const unsigned FLASH_SIZE = 7936;
 #endif
 
 static void (*__user_power_button_callback)(void);

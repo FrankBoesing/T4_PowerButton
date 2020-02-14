@@ -22,6 +22,10 @@
  * SOFTWARE.
  */
 
+#if !defined(ARDUINO_TEENSY40) && !defined(ARDUINO_TEENSY41)
+#error "This board is not supported."
+#endif
+
 #if !defined(T4PowerButton)
 #define T4PowerButton
 
