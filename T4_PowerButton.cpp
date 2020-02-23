@@ -141,7 +141,16 @@ void progInfo(void) {
 FLASHMEM
 void flexRamInfo(void) {
 
-  int itcm = 0;
+  extern unsigned long _stext;
+  extern unsigned long _etext;
+  extern unsigned long _sdata;
+  extern unsigned long _ebss;
+  extern unsigned long _flashimagelen;
+  extern unsigned long _heap_start;
+  extern unsigned long _estack;
+  extern unsigned long _itcm_block_count;
+
+  int itcm = (unsigned long)&_itcm_block_count;
   int dtcm = 0;
   int ocram = 0;
   uint32_t gpr17 = IOMUXC_GPR_GPR17;
@@ -154,32 +163,25 @@ void flexRamInfo(void) {
       default: dispstr[15 - i] = '.'; break;
       case 0b01: dispstr[15 - i] = 'O'; ocram++; break;
       case 0b10: dispstr[15 - i] = 'D'; dtcm++; break;
-      case 0b11: dispstr[15 - i] = 'I'; itcm++; break;
+      case 0b11: dispstr[15 - i] = 'I'; break;
     }
   }
 
 // Serial.printf("ITCM: %dkB, DTCM: %dkB, OCRAM: %d(+%d)kB [%s]\n", itcm * 32, dtcm * 32, ocram * 32, OCRAM_SIZE, dispstr);
   const char* fmtstr = "%-6s%7d %5.02f%% of %4dkB (%7d Bytes free) %s\n";
-
-  extern unsigned long _stext;
-  extern unsigned long _etext;
-  extern unsigned long _sdata;
-  extern unsigned long _ebss;
-  extern unsigned long _flashimagelen;
-  extern unsigned long _heap_start;
-  extern unsigned long _estack;
-
+ 
   Serial.printf(fmtstr, "FLASH:",
                 (unsigned)&_flashimagelen,
                 ((unsigned)&_flashimagelen) / (FLASH_SIZE * 1024.0f) * 100.0f,
                 FLASH_SIZE,
                 FLASH_SIZE * 1024 - ((unsigned)&_flashimagelen), "FLASHMEM, PROGMEM");
-
+  
+  unsigned long szITCM = itcm>0?(unsigned long)&_etext:0;
   Serial.printf(fmtstr, "ITCM:",
-                (unsigned)&_etext - (unsigned)&_stext,
-                (float)((unsigned)&_etext - (unsigned)&_stext) / ((float)itcm * 32768.0f) * 100.0f,
+                szITCM,
+                itcm>0?((float)(szITCM / ((float)itcm * 32768.0f) * 100.0f)):0.0f,
                 itcm * 32,
-                itcm * 32768 - ((unsigned)&_etext - (unsigned)&_stext), "(RAM1) FASTRUN");
+                itcm * 32768 - szITCM, "(RAM1) FASTRUN");
 /*
   Serial.printf(fmtstr, "OCRAM:",
                 (unsigned)&_heap_start - OCRAM_START,
