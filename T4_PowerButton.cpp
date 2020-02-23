@@ -158,10 +158,9 @@ void flexRamInfo(void) {
     }
   }
 
-// Serial.printf("ITCM: %dkB, DTCM: %dkB, OCRAM: %d(+%d)kB [%s]\n", itcm * 32, dtcm * 32, ocram * 32, OCRAM_SIZE, dispstr);
   const char* fmtstr = "%-6s%7d %5.02f%% of %4dkB (%7d Bytes free) %s\n";
 
-  extern unsigned long _stext;
+  extern unsigned long _stext; //attention != 0! becaus of alignment for null pointer deref - ITCM starts at 0
   extern unsigned long _etext;
   extern unsigned long _sdata;
   extern unsigned long _ebss;
@@ -176,17 +175,10 @@ void flexRamInfo(void) {
                 FLASH_SIZE * 1024 - ((unsigned)&_flashimagelen), "FLASHMEM, PROGMEM");
 
   Serial.printf(fmtstr, "ITCM:",
-                (unsigned)&_etext - (unsigned)&_stext,
-                (float)((unsigned)&_etext - (unsigned)&_stext) / ((float)itcm * 32768.0f) * 100.0f,
+                (unsigned)&_etext /* - (unsigned)&_stext*/,
+                (float)((unsigned)&_etext /* - (unsigned)&_stext*/) / ((float)itcm * 32768.0f) * 100.0f,
                 itcm * 32,
-                itcm * 32768 - ((unsigned)&_etext - (unsigned)&_stext), "(RAM1) FASTRUN");
-/*
-  Serial.printf(fmtstr, "OCRAM:",
-                (unsigned)&_heap_start - OCRAM_START,
-                (float)((unsigned)&_heap_start - OCRAM_START) / (OCRAM_SIZE * 1024.0f) * 100.0f,
-                OCRAM_SIZE,
-                OCRAM_SIZE * 1024 - ((unsigned)&_heap_start - OCRAM_START), "(RAM2) DMAMEM, Heap");
-*/
+                itcm * 32768 - ((unsigned)&_etext /* - (unsigned)&_stext*/), "(RAM1) FASTRUN");
 
   void* hTop = malloc(1);// current position of heap.
   unsigned heapTop = (unsigned) hTop;
