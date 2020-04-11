@@ -114,10 +114,11 @@ unsigned heapfree(void) {
 }
 
 extern "C" {
-void startup_late_hook(void) {
+void startup_early_hook(void) {
   extern unsigned long _ebss;
-  unsigned long * p =  &_ebss;
-  size_t size = (size_t)(uint8_t*)__builtin_frame_address(0) - 16 - (uintptr_t) &_ebss;
+  uint32_t e = (uintptr_t)&_ebss;
+  uint32_t * p = (uint32_t*)e + 16;
+  size_t size = (size_t)(uint8_t*)__builtin_frame_address(0) - ((uintptr_t) &_ebss + 16) - 1024;
   memset((void*)p, 0, size);
 }
 }
@@ -125,7 +126,8 @@ void startup_late_hook(void) {
 unsigned long maxstack(void) {
   extern unsigned long _ebss;
   extern unsigned long _estack;
-  unsigned long * p =  &_ebss;
+  uint32_t e = (uintptr_t)&_ebss;
+  uint32_t * p = (uint32_t*)e + 16;
   while (*p == 0) p++;
   return (unsigned) &_estack - (unsigned) p;
 }
@@ -141,7 +143,7 @@ void progInfo(void) {
 FLASHMEM
 void flexRamInfo(void) {
 
-  extern unsigned long _stext;
+  //extern unsigned long _stext;
   extern unsigned long _etext;
   extern unsigned long _sdata;
   extern unsigned long _ebss;
@@ -172,14 +174,14 @@ void flexRamInfo(void) {
  
   Serial.printf(fmtstr, "FLASH:",
                 (unsigned)&_flashimagelen,
-                ((unsigned)&_flashimagelen) / (FLASH_SIZE * 1024.0f) * 100.0f,
+                ((unsigned)&_flashimagelen) / (FLASH_SIZE * 1024) * 100,
                 FLASH_SIZE,
                 FLASH_SIZE * 1024 - ((unsigned)&_flashimagelen), "FLASHMEM, PROGMEM");
   
   unsigned long szITCM = itcm>0?(unsigned long)&_etext:0;
   Serial.printf(fmtstr, "ITCM:",
                 szITCM,
-                itcm>0?((float)(szITCM / ((float)itcm * 32768.0f) * 100.0f)):0.0f,
+                (itcm>0?((szITCM / (itcm * 32768) * 100)):0),
                 itcm * 32,
                 itcm * 32768 - szITCM, "(RAM1) FASTRUN");
 /*
