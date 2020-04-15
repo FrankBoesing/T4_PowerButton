@@ -117,8 +117,8 @@ extern "C" {
 void startup_early_hook(void) {
   extern unsigned long _ebss;
   uint32_t e = (uintptr_t)&_ebss;
-  uint32_t * p = (uint32_t*)e + 16;
-  size_t size = (size_t)(uint8_t*)__builtin_frame_address(0) - ((uintptr_t) &_ebss + 16) - 1024;
+  uint32_t * p = (uint32_t*)e + 32;
+  size_t size = (size_t)(uint8_t*)__builtin_frame_address(0) - ((uintptr_t) &_ebss + 32) - 1024;
   memset((void*)p, 0, size);
 }
 }
@@ -127,7 +127,7 @@ unsigned long maxstack(void) {
   extern unsigned long _ebss;
   extern unsigned long _estack;
   uint32_t e = (uintptr_t)&_ebss;
-  uint32_t * p = (uint32_t*)e + 16;
+  uint32_t * p = (uint32_t*)e + 32;
   while (*p == 0) p++;
   return (unsigned) &_estack - (unsigned) p;
 }
@@ -169,30 +169,22 @@ void flexRamInfo(void) {
     }
   }
 
-// Serial.printf("ITCM: %dkB, DTCM: %dkB, OCRAM: %d(+%d)kB [%s]\n", itcm * 32, dtcm * 32, ocram * 32, OCRAM_SIZE, dispstr);
   const char* fmtstr = "%-6s%7d %5.02f%% of %4dkB (%7d Bytes free) %s\n";
  
   Serial.printf(fmtstr, "FLASH:",
                 (unsigned)&_flashimagelen,
-                ((unsigned)&_flashimagelen) / (FLASH_SIZE * 1024) * 100,
+                (double)((unsigned)&_flashimagelen) / (FLASH_SIZE * 1024) * 100,
                 FLASH_SIZE,
                 FLASH_SIZE * 1024 - ((unsigned)&_flashimagelen), "FLASHMEM, PROGMEM");
   
   unsigned long szITCM = itcm>0?(unsigned long)&_etext:0;
   Serial.printf(fmtstr, "ITCM:",
                 szITCM,
-                (itcm>0?((szITCM / (itcm * 32768) * 100)):0),
+                (double)(itcm>0?((szITCM / (itcm * 32768) * 100)):0),
                 itcm * 32,
                 itcm * 32768 - szITCM, "(RAM1) FASTRUN");
-/*
-  Serial.printf(fmtstr, "OCRAM:",
-                (unsigned)&_heap_start - OCRAM_START,
-                (float)((unsigned)&_heap_start - OCRAM_START) / (OCRAM_SIZE * 1024.0f) * 100.0f,
-                OCRAM_SIZE,
-                OCRAM_SIZE * 1024 - ((unsigned)&_heap_start - OCRAM_START), "(RAM2) DMAMEM, Heap");
-*/
 
-  void* hTop = malloc(1);// current position of heap.
+  void* hTop = malloc(8);// current position of heap.
   unsigned heapTop = (unsigned) hTop;
   free(hTop);
   unsigned freeheap = (OCRAM_START + (OCRAM_SIZE * 1024)) - heapTop;
