@@ -180,7 +180,7 @@ void flexRamInfo(void) {
   unsigned long szITCM = itcm>0?(unsigned long)&_etext:0;
   Serial.printf(fmtstr, "ITCM:",
                 szITCM,
-                (double)(itcm>0?((szITCM / (itcm * 32768) * 100)):0),
+                (double)(itcm>0?(((double)szITCM / (itcm * 32768) * 100)):0),
                 itcm * 32,
                 itcm * 32768 - szITCM, "(RAM1) FASTRUN");
 
