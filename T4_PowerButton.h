@@ -29,7 +29,7 @@
 #if !defined(T4PowerButton)
 #define T4PowerButton
 
-#include "Arduino.h"
+#include <Arduino.h>
 
 enum arm_power_button_debounce {
 	arm_power_button_debounce_0ms = 3,	//No debounce
@@ -55,17 +55,17 @@ enum arm_power_button_press_on_time {		//Time to switch on
 void arm_reset(void); // reset
 void arm_power_down(void); //switch off
 void set_arm_power_button_callback(void (*fun_ptr)(void));
-void set_arm_power_button_debounce(arm_power_button_debounce debounce) { SNVS_LPCR = (SNVS_LPCR & ~(3 << 18)) | (debounce << 18); }
-void set_arm_power_button_press_time_emergency(arm_power_button_press_time_emergency emg) { SNVS_LPCR = (SNVS_LPCR & ~(3 << 16)) | (emg << 16); }
-void set_arm_power_button_press_on_time(arm_power_button_press_on_time ontime) { SNVS_LPCR = (SNVS_LPCR & ~(3 << 20)) | (ontime << 20); }
-void arm_enable_nvram(void) { SNVS_LPCR |= (1 << 24); }
+void set_arm_power_button_debounce(arm_power_button_debounce debounce);
+void set_arm_power_button_press_time_emergency(arm_power_button_press_time_emergency emg);
+void set_arm_power_button_press_on_time(arm_power_button_press_on_time ontime);
+void arm_enable_nvram(void);
 
 bool arm_power_button_pressed(void);
 
 unsigned memfree(void); //free stack / global variable space
-unsigned heapfree(void); //free heap space
-void progInfo(); //display file + version info
-void flexRamInfo(void); //print all information
+unsigned heapfree(void); //heap heap space
+void progInfo(void); //display file + vesion info
+void flexRamInfo(void);
 unsigned long maxstack(void); //maximal stack usage
 
 #endif

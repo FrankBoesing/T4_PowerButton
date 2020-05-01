@@ -22,11 +22,8 @@
  * SOFTWARE.
  */
 
-#if !defined(T4PowerButton)
-#define T4PowerButton
 
 #include "T4_PowerButton.h"
-#include "Arduino.h"
 
 
 #if defined(ARDUINO_TEENSY40)
@@ -81,6 +78,12 @@ void set_arm_power_button_callback(void (*fun_ptr)(void)) {
   }
   asm volatile ("dsb":::"memory");
 }
+
+void set_arm_power_button_callback(void (*fun_ptr)(void));
+void set_arm_power_button_debounce(arm_power_button_debounce debounce) { SNVS_LPCR = (SNVS_LPCR & ~(3 << 18)) | (debounce << 18); }
+void set_arm_power_button_press_time_emergency(arm_power_button_press_time_emergency emg) { SNVS_LPCR = (SNVS_LPCR & ~(3 << 16)) | (emg << 16); }
+void set_arm_power_button_press_on_time(arm_power_button_press_on_time ontime) { SNVS_LPCR = (SNVS_LPCR & ~(3 << 20)) | (ontime << 20); }
+void arm_enable_nvram(void) { SNVS_LPCR |= (1 << 24); }
 
 FLASHMEM
 void arm_reset(void) {
@@ -211,4 +214,3 @@ void flexRamInfo(void) {
                );
 }
 
-#endif
