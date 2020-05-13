@@ -36,7 +36,9 @@
   static const unsigned OCRAM_START = 0x20200000UL;
   static const unsigned OCRAM_SIZE = 512;
   static const unsigned FLASH_SIZE = 7936;
+#if TEENSYDUINO>151  
   extern "C" uint8_t external_psram_size; 
+#endif  
 #endif
 
 static void (*__user_power_button_callback)(void);
@@ -193,7 +195,7 @@ void flexRamInfo(void) {
   unsigned heapTop = (unsigned) hTop;
   free(hTop);
   unsigned freeheap = (OCRAM_START + (OCRAM_SIZE * 1024)) - heapTop;
-#if defined(ARDUINO_TEENSY41)
+#if defined(ARDUINO_TEENSY41) && TEENSYDUINO>151
   if (external_psram_size > 0) {
 	Serial.printf("PSRAM: %d MB\n", external_psram_size);
   } else {
