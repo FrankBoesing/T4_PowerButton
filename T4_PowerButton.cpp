@@ -22,7 +22,6 @@
  * SOFTWARE.
  */
 
-
 #include "T4_PowerButton.h"
 
 
@@ -42,30 +41,73 @@
 #endif
 
 static void (*__user_power_button_callback)(void);
+static callback_ex_action (*__user_power_button_callback_ex)(void);
 
 FLASHMEM __attribute__((noreturn))
 void arm_power_down() {
-    SNVS_LPCR |= SNVS_LPCR_TOP; //Switch off now
-    asm volatile ("dsb");
-    while (1) asm ("wfi");
+  SNVS_LPCR |= SNVS_LPCR_TOP; //Switch off now
+  asm volatile ("dsb");
+  while (1) asm ("wfi");
 }
 
+/*
+ * To be used combined with callback_ex_action_poweroff_keeparmed
+ * If this function is not called, the normal program will not
+ * continue. IntervalTimers, however, will. See the example
+ */
+FLASHMEM
+void rearm_power_button_callback(void)
+{
+  if(__user_power_button_callback != nullptr || __user_power_button_callback_ex != nullptr)
+    SNVS_LPSR |= (1 << 18) | (1 << 17);
+}
+
+
+// I think bit 18 should be checked instead bit 17
 bool arm_power_button_pressed(void) {
-  return (SNVS_LPSR >> 17) & 0x01;
+  return (SNVS_LPSR >> 18) & 0x01;
 }
 
+/*
+ * Checks whether one or both possible callbacks has been installed. 
+ * Each installed callback will be called.
+ * The possible result of __user_power_button_callback_ex will be
+ * evaluated and the action will be accordingly
+ */
 FLASHMEM
 void __int_power_button(void) {
   if (SNVS_HPSR & 0x40) {
-    SNVS_HPCOMR |= (1 << 31)/* | (1 << 4)*/;
-    SNVS_LPSR |= (1 << 18) | (1 << 17);
+    SNVS_HPCOMR |= (1 << 31) ;//| (1 << 4);
+    // This would prevent the callback from being called again
+    // while the poweroff line is low. We will postpone this decision 
+    // till after the callbacks are called;
+    // SNVS_LPSR |= (1 << 18) | (1 << 17);
+    
     if (__user_power_button_callback != nullptr) __user_power_button_callback();
-    __disable_irq();
-    NVIC_CLEAR_PENDING(IRQ_SNVS_ONOFF);
-    arm_power_down();
+    
+    callback_ex_action _action = __user_power_button_callback_ex == nullptr ? callback_ex_action_poweroff : callback_ex_action_poweroff_cancel;
+    if (__user_power_button_callback_ex != nullptr)
+        _action = __user_power_button_callback_ex();
+
+    if(_action == callback_ex_action_poweroff) {
+      SNVS_LPSR |= (1 << 18) | (1 << 17);
+      __disable_irq();
+      NVIC_CLEAR_PENDING(IRQ_SNVS_ONOFF);
+      arm_power_down();
+    } else {
+        if(_action == callback_ex_action_poweroff_cancel)
+          SNVS_LPSR |= (1 << 18) | (1 << 17);
+        // Else keeparmed
+    }
   }
 }
 
+/*
+ * This installs a callback that does not return a value.
+ * When there is no callback installed using 
+ * set_arm_power_button_callback_ex, a poweroff will be 
+ * performed after the callback has returned (once the poweroff line has been brought low)
+ */
 FLASHMEM
 void set_arm_power_button_callback(void (*fun_ptr)(void)) {
   SNVS_LPSR |= (1 << 18) | (1 << 17);
@@ -77,7 +119,32 @@ void set_arm_power_button_callback(void (*fun_ptr)(void)) {
     asm volatile ("dsb"); //make sure to write before interrupt-enable
     NVIC_ENABLE_IRQ(IRQ_SNVS_ONOFF);
   } else {
-    NVIC_DISABLE_IRQ(IRQ_SNVS_ONOFF);
+    if (__user_power_button_callback_ex == nullptr)
+      NVIC_DISABLE_IRQ(IRQ_SNVS_ONOFF);
+  }
+  asm volatile ("dsb":::"memory");
+}
+
+/*
+ * This installs a callback that returns an int.
+ * The return value (enum callback_ex_action) of the callback will
+ * determine, whether a poweroff is performed,
+ * or the poweroff is canceled or the callback function
+ * should be called back, while the poweroff line is low.
+ */
+FLASHMEM
+void set_arm_power_button_callback_ex(callback_ex_action (*fun_ptr)(void)) {
+  SNVS_LPSR |= (1 << 18) | (1 << 17);
+  __user_power_button_callback_ex = fun_ptr;
+  if (fun_ptr != nullptr) {
+    NVIC_CLEAR_PENDING(IRQ_SNVS_ONOFF);
+    attachInterruptVector(IRQ_SNVS_ONOFF, &__int_power_button);
+    NVIC_SET_PRIORITY(IRQ_SNVS_ONOFF, 255); //lowest priority
+    asm volatile ("dsb"); //make sure to write before interrupt-enable
+    NVIC_ENABLE_IRQ(IRQ_SNVS_ONOFF);
+  } else {
+    if (__user_power_button_callback == nullptr)
+      NVIC_DISABLE_IRQ(IRQ_SNVS_ONOFF);
   }
   asm volatile ("dsb":::"memory");
 }
@@ -91,11 +158,11 @@ void arm_enable_nvram(void) { SNVS_LPCR |= (1 << 24); }
 FLASHMEM
 void arm_reset(void) {
 #if TEENSYDUINO < 150
-	IOMUXC_GPR_GPR16 = 0x00200007;
-	asm volatile ("dsb":::"memory");
+  IOMUXC_GPR_GPR16 = 0x00200007;
+  asm volatile ("dsb":::"memory");
 #endif
-	SCB_AIRCR = 0x05FA0004;
-	while (1) asm ("wfi");
+  SCB_AIRCR = 0x05FA0004;
+  while (1) asm ("wfi");
 }
 
 unsigned memfree(void) {
@@ -146,7 +213,7 @@ void progInfo(void) {
   Serial.println();
 }
 
-	  
+
 FLASHMEM
 void flexRamInfo(void) {
 
