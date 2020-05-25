@@ -52,12 +52,20 @@ enum arm_power_button_press_on_time {		//Time to switch on
 	arm_power_button_press_on_time_500ms = 0
 };
 
+enum callback_ex_action {
+	callback_ex_action_poweroff = 1,
+	callback_ex_action_poweroff_cancel = 0,
+	callback_ex_action_poweroff_keeparmed = 2
+};
+
 void arm_reset(void); // reset
 void arm_power_down(void); //switch off
 void set_arm_power_button_callback(void (*fun_ptr)(void));
+void set_arm_power_button_callback_ex(callback_ex_action (*fun_ptr)(void));
 void set_arm_power_button_debounce(arm_power_button_debounce debounce);
 void set_arm_power_button_press_time_emergency(arm_power_button_press_time_emergency emg);
 void set_arm_power_button_press_on_time(arm_power_button_press_on_time ontime);
+void rearm_power_button_callback(void);
 void arm_enable_nvram(void);
 
 bool arm_power_button_pressed(void);
