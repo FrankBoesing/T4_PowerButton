@@ -155,7 +155,7 @@ void set_arm_power_button_press_time_emergency(arm_power_button_press_time_emerg
 void set_arm_power_button_press_on_time(arm_power_button_press_on_time ontime) { SNVS_LPCR = (SNVS_LPCR & ~(3 << 20)) | (ontime << 20); }
 void arm_enable_nvram(void) { SNVS_LPCR |= (1 << 24); }
 
-FLASHMEM
+FLASHMEM __attribute__((noreturn))
 void arm_reset(void) {
 #if TEENSYDUINO < 150
   IOMUXC_GPR_GPR16 = 0x00200007;
@@ -291,3 +291,223 @@ void flexRamInfo(void) {
                );
 }
 
+
+
+
+/* -------------------------------------------------------------------------------------------------- */
+/* -----------------------Hardfaults----------------------------------------------------------------- */
+/* -------------------------------------------------------------------------------------------------- */
+
+#if defined(SHOW_HARDFAULTS)
+
+static const uint32_t _marker = 0xfbfb;
+
+typedef struct __attribute__((packed)) ContextStateFrame {
+  uint32_t r0;
+  uint32_t r1;
+  uint32_t r2;
+  uint32_t r3;
+  uint32_t r12;
+  uint32_t lr;
+  uint32_t return_address;
+  uint32_t xpsr;
+} sContextStateFrame;
+
+struct __attribute__((packed)) RegInfo
+{
+  uint32_t marker;
+  uint32_t ipsr;
+  uint32_t cfsr;
+  uint32_t hfsr;
+  uint32_t dfsr;
+  uint32_t mmar;
+  uint32_t bfar;
+  uint32_t afsr;
+  ContextStateFrame sContextStateFrame;
+};
+
+DMAMEM RegInfo sRegInfo;
+
+extern "C" {
+
+  FASTRUN __attribute__((used, noreturn, optimize("O0"))) static
+  void my_fault_handler_c(sContextStateFrame *frame) {
+
+    //Read these both first:
+    sRegInfo.mmar = (*((volatile uint32_t *)(0xE000ED34)));     // MemManage Fault Address Register
+    sRegInfo.bfar = (*((volatile uint32_t *)(0xE000ED38)));     // Bus Fault Address Register
+    asm volatile("mrs %0, ipsr\n" : "=r" (sRegInfo.ipsr)::);
+    volatile uint32_t *cfsr = (volatile uint32_t *)0xE000ED28;  // Configurable Fault Status Register
+
+    sRegInfo.sContextStateFrame.r0 = frame->r0;
+    sRegInfo.sContextStateFrame.r1 = frame->r1;
+    sRegInfo.sContextStateFrame.r2 = frame->r2;
+    sRegInfo.sContextStateFrame.r12 = frame->r12;
+    sRegInfo.sContextStateFrame.lr = frame->lr;
+    sRegInfo.sContextStateFrame.return_address = frame->return_address;
+    sRegInfo.sContextStateFrame.xpsr = frame->xpsr;
+
+    sRegInfo.hfsr = (*((volatile uint32_t *)(0xE000ED2C)));     // Hard Fault Status Register
+    sRegInfo.dfsr = (*((volatile uint32_t *)(0xE000ED30)));     // Debug Fault Status Register
+    sRegInfo.afsr = (*((volatile uint32_t *)(0xE000ED3C)));     // Auxiliary Fault Status Register
+    sRegInfo.cfsr = *cfsr;
+    *cfsr |= *cfsr;
+
+    //digitalWriteFast(LED_BUILTIN, LOW);
+    sRegInfo.marker = _marker;
+    arm_dcache_flush((void*)&sRegInfo, sizeof(RegInfo));
+
+    //Reset:    
+    volatile uint32_t *aircr = (volatile uint32_t *)0xE000ED0C;
+    *aircr = (0x05FA << 16) | 0x1 << 2;
+    while (1) asm ("WFI");
+
+  }
+
+  FASTRUN __attribute__((naked)) static
+  void interrupt_vector(void)
+  {
+    __asm( ".syntax unified\n"
+           "MOVS R0, #4 \n"
+           "MOV R1, LR \n"
+           "TST R0, R1 \n"
+           "BEQ _MSP \n"
+           "MRS R0, PSP \n"
+           "B my_fault_handler_c \n"
+           "_MSP: \n"
+           "MRS R0, MSP \n"
+           "B my_fault_handler_c \n"
+           ".syntax divided\n") ;
+  }
+
+} //extern "c"
+
+FLASHMEM
+bool show_callstack(void)
+{
+	
+  arm_dcache_delete((void*)&sRegInfo, sizeof(RegInfo));
+  bool found = sRegInfo.marker == _marker;
+  if (!found) return false;
+
+#if (HARDFAULTSOUT==Serial)
+  while(!Serial && millis() < 3000){} 
+#endif
+
+  HARDFAULTSOUT.printf("Hardfault.\nReturn Address: 0x%08X IPSR:0x%02X CSFR: 0x%08X XPSR: 0x%08X\n",
+                 sRegInfo.sContextStateFrame.return_address, sRegInfo.ipsr, sRegInfo.cfsr, sRegInfo.sContextStateFrame.xpsr);
+
+  //const bool non_usage_fault_occurred = (sRegInfo.cfsr & ~0xffff0000) != 0;
+  const bool faulted_from_exception = ((sRegInfo.sContextStateFrame.xpsr & 0xFF) != 0);
+  //if (non_usage_fault_occurred) HARDFAULTSOUT.println("non usage fault");
+  if (faulted_from_exception) HARDFAULTSOUT.printf("Faulted from exception.\n");
+
+  // the bottom 8 bits of the xpsr hold the exception number of the
+  // executing exception or 0 if the processor is in Thread mode
+  // const bool faulted_from_exception = ((frame->xpsr & 0xFF) != 0);
+
+
+  //taken from startup.c :
+
+  uint32_t _CFSR = sRegInfo.cfsr;
+  if (_CFSR > 0) {
+
+    if ((_CFSR & 0xff) > 0) {
+      //Memory Management Faults
+      if ((_CFSR & 1) == 1) {
+        HARDFAULTSOUT.printf("\t(IACCVIOL) Instruction Access Violation\n");
+      } else  if (((_CFSR & (0x02)) >> 1) == 1) {
+        HARDFAULTSOUT.printf("\t(DACCVIOL) Data Access Violation\n");
+      } else if (((_CFSR & (0x08)) >> 3) == 1) {
+        HARDFAULTSOUT.printf("\t(MUNSTKERR) MemMange Fault on Unstacking\n");
+      } else if (((_CFSR & (0x10)) >> 4) == 1) {
+        HARDFAULTSOUT.printf("\t(MSTKERR) MemMange Fault on stacking\n");
+      } else if (((_CFSR & (0x20)) >> 5) == 1) {
+        HARDFAULTSOUT.printf("\t(MLSPERR) MemMange Fault on FP Lazy State\n");
+      }
+      if (((_CFSR & (0x80)) >> 7) == 1) {
+        HARDFAULTSOUT.printf("\t(MMARVALID) Accessed Address: 0x%08X\n", sRegInfo.mmar);
+      }
+    }
+
+    //Bus Fault Status Register BFSR
+    if (((_CFSR & 0x100) >> 8) == 1) {
+      HARDFAULTSOUT.printf("\t(IBUSERR) Instruction Bus Error\n");
+    } else  if (((_CFSR & (0x200)) >> 9) == 1) {
+      HARDFAULTSOUT.printf("\t(PRECISERR) Data bus error(address in BFAR)\n");
+    } else if (((_CFSR & (0x400)) >> 10) == 1) {
+      HARDFAULTSOUT.printf("\t(IMPRECISERR) Data bus error but address not related to instruction\n");
+    } else if (((_CFSR & (0x800)) >> 11) == 1) {
+      HARDFAULTSOUT.printf("\t(UNSTKERR) Bus Fault on unstacking for a return from exception \n");
+    } else if (((_CFSR & (0x1000)) >> 12) == 1) {
+      HARDFAULTSOUT.printf("\t(STKERR) Bus Fault on stacking for exception entry\n");
+    } else if (((_CFSR & (0x2000)) >> 13) == 1) {
+      HARDFAULTSOUT.printf("\t(LSPERR) Bus Fault on FP lazy state preservation\n");
+    }
+    if (((_CFSR & (0x8000)) >> 15) == 1) {      
+      HARDFAULTSOUT.printf("\t(BFARVALID) Accessed Address: 0x%08X\n", sRegInfo.bfar);
+    }
+
+
+    //Usage Fault Status Register UFSR
+    if (((_CFSR & 0x10000) >> 16) == 1) {
+      HARDFAULTSOUT.printf("\t(UNDEFINSTR) Undefined instruction\n");
+    } else  if (((_CFSR & (0x20000)) >> 17) == 1) {
+      HARDFAULTSOUT.printf("\t(INVSTATE) Instruction makes illegal use of EPSR)\n");
+    } else if (((_CFSR & (0x40000)) >> 18) == 1) {
+      HARDFAULTSOUT.printf("\t(INVPC) Usage fault: invalid EXC_RETURN\n");
+    } else if (((_CFSR & (0x80000)) >> 19) == 1) {
+      HARDFAULTSOUT.printf("\t(NOCP) No Coprocessor \n");
+    } else if (((_CFSR & (0x1000000)) >> 24) == 1) {
+      HARDFAULTSOUT.printf("\t(UNALIGNED) Unaligned access UsageFault\n");
+    } else if (((_CFSR & (0x2000000)) >> 25) == 1) {
+      HARDFAULTSOUT.printf("\t(DIVBYZERO) Divide by zero\n");
+    }
+  }
+
+  uint32_t _HFSR = sRegInfo.hfsr;
+  if (_HFSR > 0) {
+    //Memory Management Faults
+    if (((_HFSR & (0x02)) >> 1) == 1) {
+      HARDFAULTSOUT.printf("\t(VECTTBL) Bus Fault on Vec Table Read\n");
+    } else if (((_HFSR & (0x40000000)) >> 30) == 1) {
+      // HARDFAULTSOUT.printf("\t(FORCED) Forced Hard Fault\n");
+    } else if (((_HFSR & (0x80000000)) >> 31) == 31) {
+      // HARDFAULTSOUT.printf("\t(DEBUGEVT) Reserved for Debug\n");
+    }
+  }
+
+#if 0
+  HARDFAULTSOUT.printf("\nDEBUG DUMP:\n");
+  HARDFAULTSOUT.printf("ipsr:0x%X ", sRegInfo.ipsr);
+  HARDFAULTSOUT.printf("cfsr:0x%08X ", sRegInfo.cfsr);
+  HARDFAULTSOUT.printf("hfsr:0x%08X ", sRegInfo.hfsr);
+  HARDFAULTSOUT.printf("dfsr:0x%08X ", sRegInfo.dfsr);
+  HARDFAULTSOUT.printf("mmar:0x%08X ", sRegInfo.mmar);
+  HARDFAULTSOUT.printf("bfar:0x%08X ", sRegInfo.bfar);
+  HARDFAULTSOUT.printf("afsr:0x%08X\n", sRegInfo.afsr);
+  HARDFAULTSOUT.printf("r0:0x%X ", sRegInfo.sContextStateFrame.r0);
+  HARDFAULTSOUT.printf("r1:0x%X ", sRegInfo.sContextStateFrame.r1);
+  HARDFAULTSOUT.printf("r2:0x%X ", sRegInfo.sContextStateFrame.r2);
+  HARDFAULTSOUT.printf("r12:0x%X ", sRegInfo.sContextStateFrame.r12);
+  HARDFAULTSOUT.printf("lr:0x%X ", sRegInfo.sContextStateFrame.lr);
+  HARDFAULTSOUT.printf("return_address:0x%X ", sRegInfo.sContextStateFrame.return_address);
+  HARDFAULTSOUT.printf("xpsr:0x%X\n", sRegInfo.sContextStateFrame.xpsr);
+#endif
+
+  sRegInfo.marker = 0;
+  arm_dcache_flush_delete((void*)&sRegInfo, 32);
+  return true;
+}
+
+extern "C" {
+	
+ FLASHMEM void startup_late_hook() 
+ {
+   if (show_callstack()) delay(10000);
+    _VectorsRam[3] = interrupt_vector;
+ }
+
+} //extern c
+
+#endif

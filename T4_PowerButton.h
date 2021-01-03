@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-#if !defined(ARDUINO_TEENSY40) && !defined(ARDUINO_TEENSY41)
+#if !defined(ARDUINO_TEENSY40) && !defined(ARDUINO_TEENSY41) && !defined(ARDUINO_TEENSYMM)
 #error "This board is not supported."
 #endif
 
@@ -30,6 +30,9 @@
 #define T4PowerButton
 
 #include <Arduino.h>
+
+#define SHOW_HARDFAULTS	 	// undef this, if not needed.
+#define HARDFAULTSOUT Serial	// Output device for Hardfaults
 
 enum arm_power_button_debounce {
 	arm_power_button_debounce_0ms = 3,	//No debounce
