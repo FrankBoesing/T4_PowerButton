@@ -506,6 +506,9 @@ extern "C" {
  {
    if (show_callstack()) delay(10000);
     _VectorsRam[3] = interrupt_vector;
+    
+    SCB_CCR = 0x10; //Enable "Div By Zero" exceptions
+    
  }
 
 } //extern c
