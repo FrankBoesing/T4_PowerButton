@@ -319,10 +319,10 @@ struct __attribute__((packed)) RegInfo
   uint32_t ipsr;
   uint32_t cfsr;
   uint32_t hfsr;
-  uint32_t dfsr;
+ // uint32_t dfsr;
   uint32_t mmar;
   uint32_t bfar;
-  uint32_t afsr;
+ // uint32_t afsr;
   ContextStateFrame sContextStateFrame;
 };
 
@@ -348,8 +348,8 @@ extern "C" {
     sRegInfo.sContextStateFrame.xpsr = frame->xpsr;
 
     sRegInfo.hfsr = (*((volatile uint32_t *)(0xE000ED2C)));     // Hard Fault Status Register
-    sRegInfo.dfsr = (*((volatile uint32_t *)(0xE000ED30)));     // Debug Fault Status Register
-    sRegInfo.afsr = (*((volatile uint32_t *)(0xE000ED3C)));     // Auxiliary Fault Status Register
+    //sRegInfo.dfsr = (*((volatile uint32_t *)(0xE000ED30)));     // Debug Fault Status Register
+    //sRegInfo.afsr = (*((volatile uint32_t *)(0xE000ED3C)));     // Auxiliary Fault Status Register
     sRegInfo.cfsr = *cfsr;
     *cfsr |= *cfsr;
 
@@ -394,9 +394,9 @@ bool show_callstack(void)
   while(!Serial && millis() < 3000){} 
 #endif
 
-  HARDFAULTSOUT.printf("Hardfault.\nReturn Address: 0x%08X IPSR:0x%02X CSFR: 0x%08X XPSR: 0x%08X\n",
-                 sRegInfo.sContextStateFrame.return_address, sRegInfo.ipsr, sRegInfo.cfsr, sRegInfo.sContextStateFrame.xpsr);
-
+  HARDFAULTSOUT.print("Hardfault.\nReturn Address: 0x");
+  HARDFAULTSOUT.println(sRegInfo.sContextStateFrame.return_address, HEX);
+  
   //const bool non_usage_fault_occurred = (sRegInfo.cfsr & ~0xffff0000) != 0;
   const bool faulted_from_exception = ((sRegInfo.sContextStateFrame.xpsr & 0xFF) != 0);
   //if (non_usage_fault_occurred) HARDFAULTSOUT.println("non usage fault");
@@ -415,53 +415,57 @@ bool show_callstack(void)
     if ((_CFSR & 0xff) > 0) {
       //Memory Management Faults
       if ((_CFSR & 1) == 1) {
-        HARDFAULTSOUT.printf("\t(IACCVIOL) Instruction Access Violation\n");
+        HARDFAULTSOUT.println("\t(IACCVIOL) Instruction Access Violation");
       } else  if (((_CFSR & (0x02)) >> 1) == 1) {
-        HARDFAULTSOUT.printf("\t(DACCVIOL) Data Access Violation\n");
+        HARDFAULTSOUT.println("\t(DACCVIOL) Data Access Violation");
       } else if (((_CFSR & (0x08)) >> 3) == 1) {
-        HARDFAULTSOUT.printf("\t(MUNSTKERR) MemMange Fault on Unstacking\n");
+        HARDFAULTSOUT.println("\t(MUNSTKERR) MemMange Fault on Unstacking");
       } else if (((_CFSR & (0x10)) >> 4) == 1) {
-        HARDFAULTSOUT.printf("\t(MSTKERR) MemMange Fault on stacking\n");
+        HARDFAULTSOUT.println("\t(MSTKERR) MemMange Fault on stacking");
       } else if (((_CFSR & (0x20)) >> 5) == 1) {
-        HARDFAULTSOUT.printf("\t(MLSPERR) MemMange Fault on FP Lazy State\n");
+        HARDFAULTSOUT.println("\t(MLSPERR) MemMange Fault on FP Lazy State");
       }
       if (((_CFSR & (0x80)) >> 7) == 1) {
-        HARDFAULTSOUT.printf("\t(MMARVALID) Accessed Address: 0x%08X\n", sRegInfo.mmar);
+        HARDFAULTSOUT.print("\t(MMARVALID) Accessed Address: 0x");
+	HARDFAULTSOUT.print(sRegInfo.mmar, HEX);
+	if (sRegInfo.mmar < 32) HARDFAULTSOUT.print(" (nullptr)");
+	HARDFAULTSOUT.println();
       }
     }
 
     //Bus Fault Status Register BFSR
     if (((_CFSR & 0x100) >> 8) == 1) {
-      HARDFAULTSOUT.printf("\t(IBUSERR) Instruction Bus Error\n");
+      HARDFAULTSOUT.println("\t(IBUSERR) Instruction Bus Error");
     } else  if (((_CFSR & (0x200)) >> 9) == 1) {
-      HARDFAULTSOUT.printf("\t(PRECISERR) Data bus error(address in BFAR)\n");
+      HARDFAULTSOUT.println("\t(PRECISERR) Data bus error(address in BFAR)");
     } else if (((_CFSR & (0x400)) >> 10) == 1) {
-      HARDFAULTSOUT.printf("\t(IMPRECISERR) Data bus error but address not related to instruction\n");
+      HARDFAULTSOUT.println("\t(IMPRECISERR) Data bus error but address not related to instruction");
     } else if (((_CFSR & (0x800)) >> 11) == 1) {
-      HARDFAULTSOUT.printf("\t(UNSTKERR) Bus Fault on unstacking for a return from exception \n");
+      HARDFAULTSOUT.println("\t(UNSTKERR) Bus Fault on unstacking for a return from exception");
     } else if (((_CFSR & (0x1000)) >> 12) == 1) {
-      HARDFAULTSOUT.printf("\t(STKERR) Bus Fault on stacking for exception entry\n");
+      HARDFAULTSOUT.println("\t(STKERR) Bus Fault on stacking for exception entry");
     } else if (((_CFSR & (0x2000)) >> 13) == 1) {
-      HARDFAULTSOUT.printf("\t(LSPERR) Bus Fault on FP lazy state preservation\n");
+      HARDFAULTSOUT.println("\t(LSPERR) Bus Fault on FP lazy state preservation");
     }
     if (((_CFSR & (0x8000)) >> 15) == 1) {      
-      HARDFAULTSOUT.printf("\t(BFARVALID) Accessed Address: 0x%08X\n", sRegInfo.bfar);
+      HARDFAULTSOUT.print("\t(BFARVALID) Accessed Address: 0x");
+      HARDFAULTSOUT.println(sRegInfo.bfar, HEX);
     }
 
 
     //Usage Fault Status Register UFSR
     if (((_CFSR & 0x10000) >> 16) == 1) {
-      HARDFAULTSOUT.printf("\t(UNDEFINSTR) Undefined instruction\n");
+      HARDFAULTSOUT.println("\t(UNDEFINSTR) Undefined instruction");
     } else  if (((_CFSR & (0x20000)) >> 17) == 1) {
-      HARDFAULTSOUT.printf("\t(INVSTATE) Instruction makes illegal use of EPSR)\n");
+      HARDFAULTSOUT.println("\t(INVSTATE) Instruction makes illegal use of EPSR)");
     } else if (((_CFSR & (0x40000)) >> 18) == 1) {
-      HARDFAULTSOUT.printf("\t(INVPC) Usage fault: invalid EXC_RETURN\n");
+      HARDFAULTSOUT.println("\t(INVPC) Usage fault: invalid EXC_RETURN");
     } else if (((_CFSR & (0x80000)) >> 19) == 1) {
-      HARDFAULTSOUT.printf("\t(NOCP) No Coprocessor \n");
+      HARDFAULTSOUT.println("\t(NOCP) No Coprocessor");
     } else if (((_CFSR & (0x1000000)) >> 24) == 1) {
-      HARDFAULTSOUT.printf("\t(UNALIGNED) Unaligned access UsageFault\n");
+      HARDFAULTSOUT.println("\t(UNALIGNED) Unaligned access UsageFault");
     } else if (((_CFSR & (0x2000000)) >> 25) == 1) {
-      HARDFAULTSOUT.printf("\t(DIVBYZERO) Divide by zero\n");
+      HARDFAULTSOUT.println("\t(DIVBYZERO) Divide by zero");
     }
   }
 
@@ -469,11 +473,11 @@ bool show_callstack(void)
   if (_HFSR > 0) {
     //Memory Management Faults
     if (((_HFSR & (0x02)) >> 1) == 1) {
-      HARDFAULTSOUT.printf("\t(VECTTBL) Bus Fault on Vec Table Read\n");
+      HARDFAULTSOUT.println("\t(VECTTBL) Bus Fault on Vec Table Read");
     } else if (((_HFSR & (0x40000000)) >> 30) == 1) {
-      // HARDFAULTSOUT.printf("\t(FORCED) Forced Hard Fault\n");
+      // HARDFAULTSOUT.println("\t(FORCED) Forced Hard Fault");
     } else if (((_HFSR & (0x80000000)) >> 31) == 31) {
-      // HARDFAULTSOUT.printf("\t(DEBUGEVT) Reserved for Debug\n");
+      // HARDFAULTSOUT.println("\t(DEBUGEVT) Reserved for Debug");
     }
   }
 
