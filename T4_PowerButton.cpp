@@ -35,9 +35,9 @@
   static const unsigned OCRAM_START = 0x20200000UL;
   static const unsigned OCRAM_SIZE = 512;
   static const unsigned FLASH_SIZE = 7936;
-#if TEENSYDUINO>151  
-  extern "C" uint8_t external_psram_size; 
-#endif  
+#if TEENSYDUINO>151
+  extern "C" uint8_t external_psram_size;
+#endif
 #endif
 
 static void (*__user_power_button_callback)(void);
@@ -69,7 +69,7 @@ bool arm_power_button_pressed(void) {
 }
 
 /*
- * Checks whether one or both possible callbacks has been installed. 
+ * Checks whether one or both possible callbacks has been installed.
  * Each installed callback will be called.
  * The possible result of __user_power_button_callback_ex will be
  * evaluated and the action will be accordingly
@@ -79,12 +79,12 @@ void __int_power_button(void) {
   if (SNVS_HPSR & 0x40) {
     SNVS_HPCOMR |= (1 << 31) ;//| (1 << 4);
     // This would prevent the callback from being called again
-    // while the poweroff line is low. We will postpone this decision 
+    // while the poweroff line is low. We will postpone this decision
     // till after the callbacks are called;
     // SNVS_LPSR |= (1 << 18) | (1 << 17);
-    
+
     if (__user_power_button_callback != nullptr) __user_power_button_callback();
-    
+
     callback_ex_action _action = __user_power_button_callback_ex == nullptr ? callback_ex_action_poweroff : callback_ex_action_poweroff_cancel;
     if (__user_power_button_callback_ex != nullptr)
         _action = __user_power_button_callback_ex();
@@ -104,8 +104,8 @@ void __int_power_button(void) {
 
 /*
  * This installs a callback that does not return a value.
- * When there is no callback installed using 
- * set_arm_power_button_callback_ex, a poweroff will be 
+ * When there is no callback installed using
+ * set_arm_power_button_callback_ex, a poweroff will be
  * performed after the callback has returned (once the poweroff line has been brought low)
  */
 FLASHMEM
@@ -244,13 +244,13 @@ void flexRamInfo(void) {
   }
 
   const char* fmtstr = "%-6s%7d %5.02f%% of %4dkB (%7d Bytes free) %s\n";
- 
+
   Serial.printf(fmtstr, "FLASH:",
                 (unsigned)&_flashimagelen,
                 (double)((unsigned)&_flashimagelen) / (FLASH_SIZE * 1024) * 100,
                 FLASH_SIZE,
                 FLASH_SIZE * 1024 - ((unsigned)&_flashimagelen), "FLASHMEM, PROGMEM");
-  
+
   unsigned long szITCM = itcm>0?(unsigned long)&_etext:0;
   Serial.printf(fmtstr, "ITCM:",
                 szITCM,
@@ -267,7 +267,7 @@ void flexRamInfo(void) {
 	Serial.printf("PSRAM: %d MB\n", external_psram_size);
   } else {
 	Serial.printf("PSRAM: none\n", external_psram_size);
-  }	  
+  }
 #endif
   Serial.printf("OCRAM:\n  %7d Bytes (%d kB)\n", OCRAM_SIZE * 1024, OCRAM_SIZE);
   Serial.printf("- %7d Bytes (%d kB) DMAMEM\n", ((unsigned)&_heap_start - OCRAM_START), ((unsigned)&_heap_start - OCRAM_START) / 1024);
@@ -319,19 +319,22 @@ struct __attribute__((packed)) RegInfo
   uint32_t ipsr;
   uint32_t cfsr;
   uint32_t hfsr;
- // uint32_t dfsr;
+  //uint32_t dfsr;
   uint32_t mmar;
   uint32_t bfar;
- // uint32_t afsr;
-  ContextStateFrame sContextStateFrame;
+  //uint32_t afsr;
+  uint32_t return_address;
+  uint32_t xpsr;
+  bool temperature;
 };
+
 
 DMAMEM RegInfo sRegInfo;
 
 extern "C" {
 
   FASTRUN __attribute__((used, noreturn, optimize("O0"))) static
-  void my_fault_handler_c(sContextStateFrame *frame) {
+  void my_fault_handler_c(ContextStateFrame *frame) {
 
     //Read these both first:
     sRegInfo.mmar = (*((volatile uint32_t *)(0xE000ED34)));     // MemManage Fault Address Register
@@ -339,13 +342,13 @@ extern "C" {
     asm volatile("mrs %0, ipsr\n" : "=r" (sRegInfo.ipsr)::);
     volatile uint32_t *cfsr = (volatile uint32_t *)0xE000ED28;  // Configurable Fault Status Register
 
-    sRegInfo.sContextStateFrame.r0 = frame->r0;
-    sRegInfo.sContextStateFrame.r1 = frame->r1;
-    sRegInfo.sContextStateFrame.r2 = frame->r2;
-    sRegInfo.sContextStateFrame.r12 = frame->r12;
-    sRegInfo.sContextStateFrame.lr = frame->lr;
-    sRegInfo.sContextStateFrame.return_address = frame->return_address;
-    sRegInfo.sContextStateFrame.xpsr = frame->xpsr;
+    //sRegInfo.sContextStateFrame.r0 = frame->r0;
+    //sRegInfo.sContextStateFrame.r1 = frame->r1;
+    //sRegInfo.sContextStateFrame.r2 = frame->r2;
+    //sRegInfo.sContextStateFrame.r12 = frame->r12;
+    //sRegInfo.sContextStateFrame.lr = frame->lr;
+    sRegInfo.return_address = frame->return_address;
+    sRegInfo.xpsr = frame->xpsr;
 
     sRegInfo.hfsr = (*((volatile uint32_t *)(0xE000ED2C)));     // Hard Fault Status Register
     //sRegInfo.dfsr = (*((volatile uint32_t *)(0xE000ED30)));     // Debug Fault Status Register
@@ -353,15 +356,26 @@ extern "C" {
     sRegInfo.cfsr = *cfsr;
     *cfsr |= *cfsr;
 
-    //digitalWriteFast(LED_BUILTIN, LOW);
+    sRegInfo.temperature = 0;
     sRegInfo.marker = _marker;
     arm_dcache_flush((void*)&sRegInfo, sizeof(RegInfo));
 
-    //Reset:    
+    //Reset:
+    volatile uint32_t *aircr = (volatile uint32_t *)0xE000ED0C;
+    *aircr = (0x05FA << 16) | 0x1 << 2;
+    asm volatile("dsb");
+    while (1) asm ("WFI");
+
+  }
+
+  FLASHMEM
+  static void fault_temp_isr(void) {
+    sRegInfo.temperature = true;
+    sRegInfo.marker = _marker;
+    arm_dcache_flush((void*)&sRegInfo, sizeof(RegInfo));
     volatile uint32_t *aircr = (volatile uint32_t *)0xE000ED0C;
     *aircr = (0x05FA << 16) | 0x1 << 2;
     while (1) asm ("WFI");
-
   }
 
   FASTRUN __attribute__((naked)) static
@@ -385,27 +399,36 @@ extern "C" {
 FLASHMEM
 bool show_callstack(void)
 {
-	
+
   arm_dcache_delete((void*)&sRegInfo, sizeof(RegInfo));
   bool found = sRegInfo.marker == _marker;
   if (!found) return false;
 
 #if (HARDFAULTSOUT==Serial)
-  while(!Serial && millis() < 3000){} 
+  while(!Serial && millis() < 3000){}
 #endif
 
+  if (sRegInfo.temperature) {
+	HARDFAULTSOUT.println("Temperature Panic.\n Power down.\n");
+	HARDFAULTSOUT.flush();
+	delay(5);
+	IOMUXC_GPR_GPR16 = 0x00000007;
+	SNVS_LPCR |= SNVS_LPCR_TOP; //Switch off now
+	while (1) asm ("wfi");
+  }
+
+
   HARDFAULTSOUT.print("Hardfault.\nReturn Address: 0x");
-  HARDFAULTSOUT.println(sRegInfo.sContextStateFrame.return_address, HEX);
-  
+  HARDFAULTSOUT.println(sRegInfo.return_address, HEX);
+
   //const bool non_usage_fault_occurred = (sRegInfo.cfsr & ~0xffff0000) != 0;
-  const bool faulted_from_exception = ((sRegInfo.sContextStateFrame.xpsr & 0xFF) != 0);
+  const bool faulted_from_exception = ((sRegInfo.xpsr & 0xFF) != 0);
   //if (non_usage_fault_occurred) HARDFAULTSOUT.println("non usage fault");
   if (faulted_from_exception) HARDFAULTSOUT.printf("Faulted from exception.\n");
 
   // the bottom 8 bits of the xpsr hold the exception number of the
   // executing exception or 0 if the processor is in Thread mode
   // const bool faulted_from_exception = ((frame->xpsr & 0xFF) != 0);
-
 
   //taken from startup.c :
 
@@ -429,6 +452,9 @@ bool show_callstack(void)
         HARDFAULTSOUT.print("\t(MMARVALID) Accessed Address: 0x");
 	HARDFAULTSOUT.print(sRegInfo.mmar, HEX);
 	if (sRegInfo.mmar < 32) HARDFAULTSOUT.print(" (nullptr)");
+	extern unsigned long _ebss;
+	if ((sRegInfo.mmar >= (uint32_t)&_ebss) && (sRegInfo.mmar < (uint32_t)&_ebss + 32))
+		HARDFAULTSOUT.print(" (Stack problem)\n\tCheck for stack overflows, array bounds, etc.");
 	HARDFAULTSOUT.println();
       }
     }
@@ -447,7 +473,7 @@ bool show_callstack(void)
     } else if (((_CFSR & (0x2000)) >> 13) == 1) {
       HARDFAULTSOUT.println("\t(LSPERR) Bus Fault on FP lazy state preservation");
     }
-    if (((_CFSR & (0x8000)) >> 15) == 1) {      
+    if (((_CFSR & (0x8000)) >> 15) == 1) {
       HARDFAULTSOUT.print("\t(BFARVALID) Accessed Address: 0x");
       HARDFAULTSOUT.println(sRegInfo.bfar, HEX);
     }
@@ -505,14 +531,16 @@ bool show_callstack(void)
 }
 
 extern "C" {
-	
- FLASHMEM void startup_late_hook() 
+
+ FLASHMEM void startup_late_hook()
  {
+
+   attachInterruptVector(IRQ_TEMPERATURE_PANIC, &fault_temp_isr);
+  _VectorsRam[3] = interrupt_vector;
+   SCB_CCR = 0x10; //Enable "Div By Zero" exceptions
+
    if (show_callstack()) delay(10000);
-    _VectorsRam[3] = interrupt_vector;
-    
-    SCB_CCR = 0x10; //Enable "Div By Zero" exceptions
-    
+
  }
 
 } //extern c
