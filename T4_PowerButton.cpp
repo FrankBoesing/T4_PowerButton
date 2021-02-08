@@ -405,7 +405,7 @@ bool show_callstack(void)
   if (!found) return false;
 
 #if (HARDFAULTSOUT==Serial)
-  while(!Serial && millis() < 3000){}
+  while(!Serial && millis() < 10000){}
 #endif
 
   if (sRegInfo.temperature) {
