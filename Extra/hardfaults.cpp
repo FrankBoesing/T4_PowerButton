@@ -32,18 +32,19 @@
 #pragma GCC push_options
 #pragma GCC optimize("Os")
 
-//DMAMEM char bufHF[256]; // this cheat works
-EXTMEM char bufHF[256]; // this cheat works
+DMAMEM char _bufHF[256]; // this  works
+//EXTMEM char bufHF[256]; // this also works - given PSRAM
+FLASHMEM
 __attribute__((weak))
 void userHFDebugDump( char *memHF, bool bState ){
   if ( bState ) {
-    strcpy( memHF, "You Are Here - via PSRAM EXTMEM! :( \n")
-    ; // Can't print but ... HARDFAULTSOUT.print("\nJUST FAULTED :: userDebugDump() in startup.c ___ \n");
+    // User code to record state on Fault here
+    // memHF points to 256 Bytes of DMAMEM, sketch can allocate userMem in DMAMEM or EXTMEM with PSRAM
+    // If using memory before return do arm_dcache_flush((void*)&userMem, sizeof(userMem));
   }
   else {
-    // User version in SKETCH uses Serial.print()
-    HARDFAULTSOUT.print("\nFAULT RECOVERY :: userHFDebugDump() in hardfaults.cpp ___ \n");
-    HARDFAULTSOUT.print( memHF);
+    // User version in SKETCH will come here on Restart after Fault
+    // Serial.print("\nFAULT RECOVERY \n");
   }
   return;
 }
@@ -124,8 +125,8 @@ extern "C" {
     _sRegInfo.temperature = 0;
     _sRegInfo.died = 0;
     arm_dcache_flush((void*)&_sRegInfo, sizeof(_tRegInfo));
-    userHFDebugDump( bufHF, true );
-    arm_dcache_flush((void*)&bufHF, sizeof(bufHF));
+    userHFDebugDump( _bufHF, true );
+    arm_dcache_flush((void*)&_bufHF, sizeof(_bufHF));
     _reset();
 
   }
@@ -297,7 +298,7 @@ static bool _show_hardfault(void)
       } else if (((_CFSR & (0x2000000)) >> 25) == 1) {
         HARDFAULTSOUT.println("\t(DIVBYZERO) Divide by zero");
       }
-      userHFDebugDump( bufHF, false );
+      userHFDebugDump( _bufHF, false );
   }
 
     uint32_t _HFSR = _sRegInfo.hfsr;
