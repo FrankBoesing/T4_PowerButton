@@ -31,9 +31,6 @@
 
 #include <Arduino.h>
 
-#define SHOW_HARDFAULTS	 	// undef this, if not needed.
-#define HARDFAULTSOUT Serial	// Output device for Hardfaults
-
 enum arm_power_button_debounce {
 	arm_power_button_debounce_0ms = 3,	//No debounce
 	arm_power_button_debounce_50ms = 0,	//50ms debounce (default)
@@ -72,11 +69,5 @@ void rearm_power_button_callback(void);
 void arm_enable_nvram(void);
 
 bool arm_power_button_pressed(void);
-
-unsigned memfree(void); //free stack / global variable space
-unsigned heapfree(void); //heap heap space
-void progInfo(void); //display file + vesion info
-void flexRamInfo(void);
-unsigned long maxstack(void); //maximal stack usage
 
 #endif
