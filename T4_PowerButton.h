@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-#if !defined(ARDUINO_TEENSY40) && !defined(ARDUINO_TEENSY41) && !defined(ARDUINO_TEENSYMM)
+#if !defined(__IMXRT1062__)
 #error "This board is not supported."
 #endif
 
